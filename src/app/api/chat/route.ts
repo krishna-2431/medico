@@ -101,7 +101,7 @@ export async function POST(req: Request) {
       { role: "user", content: currentMsgContent }
     ];
 
-    // --- RAG IMPLEMENTATION ---
+    // --- CONVERSATIONAL CONTEXT-AWARE RAG IMPLEMENTATION ---
     try {
       const { connect } = await import("@lancedb/lancedb");
       const { pipeline } = await import("@huggingface/transformers");
@@ -116,25 +116,42 @@ export async function POST(req: Request) {
         const db = await connect(dbPath);
         const table = await db.openTable("medical_knowledge");
 
-        console.log(`[RAG ENGINE] Embedding query: "${queryText.slice(0, 80)}" using Xenova/all-MiniLM-L6-v2`);
+        // Extract recent conversation context so follow-up questions
+        // (e.g. "what is the dose for that?", "are there side effects?")
+        // retain full medical context when querying LanceDB
+        const recentHistoryContext = (history || [])
+          .slice(-3)
+          .map((h: { role: string; content: string }) => {
+            const roleLabel = h.role === "user" ? "Patient" : "Doctor";
+            const textSnippet = typeof h.content === "string" ? h.content.slice(0, 120) : "";
+            return `${roleLabel}: ${textSnippet}`;
+          })
+          .filter(Boolean)
+          .join(". ");
+
+        const contextualSearchQuery = recentHistoryContext
+          ? `${recentHistoryContext}. Query: ${queryText}`
+          : queryText;
+
+        console.log(`[RAG ENGINE] Embedding contextual query: "${contextualSearchQuery.slice(0, 90)}..."`);
         const extractor = await pipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2");
-        const output = await extractor(queryText, { pooling: "mean", normalize: true });
+        const output = await extractor(contextualSearchQuery, { pooling: "mean", normalize: true });
         const queryVector = Array.from(output.data as Float32Array);
 
-        // Use correct toArray() API — .execute() is a protected method and was broken
+        // Vector search in LanceDB
         const results = await table.vectorSearch(queryVector).limit(2).toArray();
 
         if (results.length > 0) {
           console.log(`[RAG ENGINE] ✓ Retrieved ${results.length} matching medical documents from LanceDB! Top match distance: ${(results[0] as { _distance?: number })._distance}`);
           const contextText = results.map((r: Record<string, unknown>) => r.text as string).join("\n\n");
-          messages[0].content += `\n\n--- MEDICAL KNOWLEDGE BASE CONTEXT ---\n${contextText}\n\nUse the above context to answer the user's question if it is relevant.`;
+          messages[0].content += `\n\n--- MEDICAL KNOWLEDGE BASE CONTEXT (RETRIEVED FROM RAG FOR THIS CONVERSATION) ---\n${contextText}\n\nUse the above context to answer the user's question accurately in connection with their ongoing medical history.`;
         }
       }
     } catch (ragError) {
       // RAG is non-critical; continue without it
       console.error("[RAG ENGINE] Retrieval Failed, proceeding without context:", ragError);
     }
-    // -------------------------
+    // --------------------------------------------------------
 
     // --- TAVILY WEB SEARCH (FOR REAL DOCTORS & LINKS) ---
     if (promptType === "doctor" && process.env.TAVILY_API_KEY) {
