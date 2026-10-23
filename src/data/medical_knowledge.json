@@ -1,0 +1,22 @@
+[
+  {
+    "id": "doc1",
+    "topic": "First Aid for Burns",
+    "content": "For minor burns (first-degree), immediately run cool (not cold) water over the burn for 10 to 15 minutes or until the pain eases. Do not apply ice, as it can cause further tissue damage. Apply a thin layer of aloe vera lotion or antibiotic ointment. Cover the burn with a sterile gauze bandage, wrapped loosely to avoid putting pressure on burned skin. Take an over-the-counter pain reliever if necessary. If the burn is severe, covers a large area of the body, or is chemical/electrical, seek emergency medical care immediately."
+  },
+  {
+    "id": "doc2",
+    "topic": "Symptoms of a Heart Attack",
+    "content": "Common symptoms of a heart attack include chest pain or discomfort that may feel like pressure, squeezing, or fullness in the center of the chest. The pain may spread to the arms, neck, jaw, back, or stomach. Other symptoms include shortness of breath, cold sweat, nausea, lightheadedness, and extreme fatigue. Women may experience slightly different symptoms, such as jaw or back pain, nausea, and shortness of breath without significant chest pain. If you suspect a heart attack, call emergency services (like 911) immediately. Do not drive yourself to the hospital."
+  },
+  {
+    "id": "doc3",
+    "topic": "Managing Asthma Attacks",
+    "content": "During an asthma attack, sit upright and stay calm. Take one puff of your reliever inhaler (usually blue) every 30 to 60 seconds, up to a maximum of 10 puffs. If you do not have your inhaler, or if you don't feel better after 10 puffs, call emergency services immediately. While waiting for an ambulance, continue to take one puff of your inhaler every 30 to 60 seconds. Asthma attacks can be life-threatening if ignored."
+  },
+  {
+    "id": "doc4",
+    "topic": "Treating a Deep Cut",
+    "content": "For a deep cut that is bleeding heavily, apply direct and firm pressure to the wound using a clean cloth or sterile gauze. Keep the pressure continuous for at least 10 minutes without lifting the cloth to check. Elevate the injured area above the heart if possible. If the bleeding seeps through the cloth, do not remove it; place another cloth on top and continue applying pressure. If the bleeding does not stop, or if the cut is gaping or caused by a dirty/rusty object, seek immediate medical attention. Stitches or a tetanus shot may be required."
+  }
+]
