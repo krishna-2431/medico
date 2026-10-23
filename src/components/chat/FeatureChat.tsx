@@ -153,37 +153,59 @@ export function FeatureChat({
     }
   }, []);
 
-  // Load all sessions for this feature from the database on mount
-  const fetchSessions = useCallback(async (selectFirst = true) => {
+  const initialMountDoneRef = useRef(false);
+
+  // Refresh sessions list (e.g. after a message is saved)
+  const refreshSessions = useCallback(async () => {
     try {
       const res = await fetch(`/api/chat/sessions?type=${promptType}`);
       if (res.ok) {
         const data = await res.json();
         const loadedSessions: ChatSession[] = data.sessions || [];
         setSessions(loadedSessions);
-
-        if (selectFirst && loadedSessions.length > 0 && !activeSessionId) {
-          const firstId = loadedSessions[0].id;
-          setActiveSessionId(firstId);
-          loadSessionMessages(firstId);
-        } else if (loadedSessions.length === 0) {
-          setIsInitialized(true);
-        }
-      } else {
-        setIsInitialized(true);
+        return loadedSessions;
       }
     } catch (err) {
       console.warn("Could not load chat sessions:", err);
-      setIsInitialized(true);
     }
-  }, [promptType, activeSessionId, loadSessionMessages]);
+    return [];
+  }, [promptType]);
 
+  // Initial mount: load sessions and select first session if available
   useEffect(() => {
-    const timer = setTimeout(() => {
-      fetchSessions(true);
+    let isMounted = true;
+    initialMountDoneRef.current = false;
+
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/chat/sessions?type=${promptType}`);
+        if (!isMounted) return;
+        if (res.ok) {
+          const data = await res.json();
+          const loadedSessions: ChatSession[] = data.sessions || [];
+          setSessions(loadedSessions);
+
+          // Only select first session on cold page load
+          if (!initialMountDoneRef.current && loadedSessions.length > 0) {
+            initialMountDoneRef.current = true;
+            const firstId = loadedSessions[0].id;
+            setActiveSessionId(firstId);
+            loadSessionMessages(firstId);
+            return;
+          }
+        }
+      } catch (err) {
+        console.warn("Failed to load initial sessions:", err);
+      } finally {
+        if (isMounted) setIsInitialized(true);
+      }
     }, 0);
-    return () => clearTimeout(timer);
-  }, [fetchSessions]);
+
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+    };
+  }, [promptType, loadSessionMessages]);
 
   useEffect(() => {
     scrollToBottom();
@@ -191,7 +213,13 @@ export function FeatureChat({
 
   // Start a fresh, clean ChatGPT-style session
   const handleNewChat = () => {
-    if (abortControllerRef.current) abortControllerRef.current.abort();
+    if (isTyping && abortControllerRef.current) {
+      try {
+        abortControllerRef.current.abort();
+      } catch {}
+    }
+    abortControllerRef.current = null;
+    setIsTyping(false);
     setActiveSessionId(null);
     setMessages([]);
     setInput("");
@@ -202,7 +230,13 @@ export function FeatureChat({
   // Switch to an existing session
   const handleSelectSession = (sessionId: string) => {
     if (sessionId === activeSessionId) return;
-    if (abortControllerRef.current) abortControllerRef.current.abort();
+    if (isTyping && abortControllerRef.current) {
+      try {
+        abortControllerRef.current.abort();
+      } catch {}
+    }
+    abortControllerRef.current = null;
+    setIsTyping(false);
     setActiveSessionId(sessionId);
     loadSessionMessages(sessionId);
     setInput("");
@@ -354,7 +388,7 @@ export function FeatureChat({
           if (savedData.session?.id) {
             setActiveSessionId(savedData.session.id);
             // Refresh sessions list in sidebar to reflect new title/time
-            fetchSessions(false);
+            refreshSessions();
           }
         }
       } catch (saveErr) {
@@ -373,10 +407,16 @@ export function FeatureChat({
     } finally {
       setIsTyping(false);
     }
-  }, [input, selectedImage, isTyping, messages, promptType, activeSessionId, fetchSessions]);
+  }, [input, selectedImage, isTyping, messages, promptType, activeSessionId, refreshSessions]);
 
   const handleClearCurrentSession = () => {
-    if (abortControllerRef.current) abortControllerRef.current.abort();
+    if (isTyping && abortControllerRef.current) {
+      try {
+        abortControllerRef.current.abort();
+      } catch {}
+    }
+    abortControllerRef.current = null;
+    setIsTyping(false);
     if (activeSessionId) {
       fetch(`/api/chat/sessions/${activeSessionId}`, { method: "DELETE" }).catch(() => {});
       setSessions(prev => prev.filter(s => s.id !== activeSessionId));

@@ -89,6 +89,10 @@ export async function fetchAIStream(
       reader?.releaseLock();
     }
   } catch (error) {
+    if (signal?.aborted || (error instanceof Error && error.name === "AbortError")) {
+      // User intentionally cancelled or switched chats — return cleanly
+      return;
+    }
     console.error("AI Service Error:", error);
     throw error;
   }
