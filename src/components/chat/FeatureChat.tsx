@@ -83,11 +83,12 @@ export function FeatureChat({
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
-  // Load from localStorage safely — use async tick to avoid sync setState in effect error
+  // Load from localStorage first, then sync with database for multi-device persistence
   useEffect(() => {
-    const timer = setTimeout(() => {
-      const saved = localStorage.getItem(`chat_history_${promptType}`);
+    let isMounted = true;
+    const timer = setTimeout(async () => {
       let initialMessages: Message[] = [];
+      const saved = localStorage.getItem(`chat_history_${promptType}`);
       if (saved) {
         try {
           initialMessages = JSON.parse(saved);
@@ -95,19 +96,61 @@ export function FeatureChat({
           // ignore corrupt data
         }
       }
-      setMessages(initialMessages);
+      if (isMounted && initialMessages.length > 0) {
+        setMessages(initialMessages);
+      }
       setIsInitialized(true);
+
+      // Fetch cloud history for logged-in user (syncs from another device)
+      try {
+        const res = await fetch(`/api/chat/save?promptType=${promptType}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (isMounted && Array.isArray(data.messages) && data.messages.length > 0) {
+            // If local storage was empty (e.g. new phone or fresh browser), hydrate from cloud
+            if (initialMessages.length === 0 || data.messages.length >= initialMessages.length) {
+              setMessages(data.messages);
+              localStorage.setItem(`chat_history_${promptType}`, JSON.stringify(data.messages));
+            }
+          }
+        }
+      } catch (err) {
+        // Offline or unauthenticated fallback
+        console.warn("Could not sync cloud chat history:", err);
+      }
     }, 0);
-    return () => clearTimeout(timer);
+
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+    };
   }, [promptType]);
 
+  // Persist messages to both local storage and database
   useEffect(() => {
-    if (isInitialized) {
-      // Only store content and metadata — never store base64 images to avoid localStorage quota errors
-      const toStore = messages.map(m => ({ ...m, image: undefined }));
-      localStorage.setItem(`chat_history_${promptType}`, JSON.stringify(toStore));
+    if (!isInitialized) return;
+
+    // Fast local save (never store large base64 images in localStorage)
+    const toStore = messages.map(m => ({ ...m, image: undefined }));
+    localStorage.setItem(`chat_history_${promptType}`, JSON.stringify(toStore));
+
+    // When message stream finishes and messages exist, sync to database
+    if (!isTyping && messages.length > 0) {
+      const syncTimer = setTimeout(() => {
+        fetch("/api/chat/save", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            messages: toStore,
+            promptType,
+            title: `${title} Consultation`
+          })
+        }).catch(() => {});
+      }, 500);
+
+      return () => clearTimeout(syncTimer);
     }
-  }, [messages, promptType, isInitialized]);
+  }, [messages, promptType, isInitialized, isTyping, title]);
 
   useEffect(() => {
     scrollToBottom();
@@ -220,6 +263,8 @@ export function FeatureChat({
   const handleClear = () => {
     if (abortControllerRef.current) abortControllerRef.current.abort();
     setMessages([]);
+    localStorage.removeItem(`chat_history_${promptType}`);
+    fetch(`/api/chat/save?promptType=${promptType}`, { method: "DELETE" }).catch(() => {});
   };
 
   const handleExport = () => {
